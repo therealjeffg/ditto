@@ -1,4 +1,5 @@
 import { el } from '@elemaudio/core'
+import {default as core} from '@elemaudio/plugin-renderer'
 
 import type { Channels, Limits } from './index.js'
 
@@ -24,6 +25,7 @@ export type Options = {
  * @returns original + delayed output
  */
 export const process = (options: Options): Channels => {
+
   const { input, delayTime, feedback, mix } = options
 
   const delayTimeNode = el.sm(el.const({ key: 'simpleDelay:delayTime', value: delayTime }))

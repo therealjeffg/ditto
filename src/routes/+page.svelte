@@ -13,7 +13,7 @@
   import Presets from '$components/views/Presets.svelte'
   import PresetsIcon from '$components/icons/Presets.svelte'
 
-  type View = 'connect' | 'effect' | 'presets'
+  type View = 'connect' | 'effect' | 'presets' 
 
   let input: Channels
   let view: View = 'effect'
@@ -21,6 +21,11 @@
 
   // Initialize Elementary Audio
   core.on('load', function () {
+
+    // core.on('parameterValueChange', function(e) {
+    //   console.log(e.paramId, e.value); // e.g. "feedback"
+    // })
+
     input = {
       left: el.in({ channel: 0 }),
       right: el.in({ channel: 1 })

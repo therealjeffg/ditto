@@ -16,5 +16,27 @@
     "maxHeight": 700,
     "showToolbar": false
   },
-  "parameters": []
+  "parameters": [
+    {
+      "paramId": "delayTime",
+      "name": "Delay Time (ms)",
+      "min": 0,
+      "max": 1000,
+      "defaultValue": 500
+    },
+    {
+      "paramId": "feedback",
+      "name": "Feedback",
+      "min": 0,
+      "max": 100,
+      "defaultValue": 50
+    },
+    {
+      "paramId": "mix",
+      "name": "Mix",
+      "min": 0,
+      "max": 100,
+      "defaultValue": 50
+    }
+  ]
 }

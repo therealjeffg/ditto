@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy } from 'svelte'
   import { fly } from 'svelte/transition'
+  import { default as core } from '@elemaudio/plugin-renderer'
 
   import { limits, process } from '$lib/audio/delay.js'
   import { patchStore, presetsStore } from '../../stores.js'
@@ -10,6 +11,7 @@
   import type { Patch } from '$lib/patch'
   import { savePreset } from '$lib/presets'
   import Knob from '$components/controls/Knob.svelte'
+
 
   export let input: Channels
   export let render: (channels: Channels) => void
@@ -80,8 +82,38 @@
         break
     }
 
+    console.log('setParam>', patch.params)
+
     patchStore.set(patch)
   }
+
+  function setParam2(id : string, value : number) {
+
+    console.log('setParame>', id, value)
+
+    switch (id) {
+      case 'delayTime':
+        patch.params.delayTime = (value * 1000)
+        break
+
+      case 'feedback':
+        patch.params.feedback = (value * 100)
+        break
+
+      case 'mix':
+        patch.params.mix = (value * 100)
+        break
+    }
+
+    console.log('setParam2>', patch.params)
+
+    patchStore.set(patch)
+  }
+
+  core.on('parameterValueChange', function(e) {
+    // console.log(e.paramId, e.value); // e.g. "feedback"
+    setParam2(e.paramId, e.value)
+  })
 
   const handleSavePatch = async (): Promise<void> => {
     try {
