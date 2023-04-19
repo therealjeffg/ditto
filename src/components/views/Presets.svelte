@@ -2,7 +2,7 @@
   import {  onDestroy } from 'svelte'
   import { fly } from 'svelte/transition'
 
-  import { patchStore, presetsStore } from '../../stores'
+  import { patchStore, presetsStore, sessionStore, viewStore } from '../../stores'
   import type { Patch } from '$lib/patch'
   import AddPreset from '$components/presets/AddPreset.svelte'
   import ClearSearch from '$components/icons/ClearSearch.svelte'
@@ -13,28 +13,11 @@
   import Search from '$components/icons/Search.svelte'
 
   let isSearching = false
-  let adding = false
-  let editing = false
   let maintainPresetSorting = false
   let presets = $presetsStore.presets
   let selectedPreset = $presetsStore.presets.find(({ id }) => id === $presetsStore.selectedPatch) as Patch
 
-  const unsubscribePresetsStore = presetsStore.subscribe((state) => {
-    selectedPreset = state.presets.find(({ id }) => id === state.selectedPatch) as Patch
-
-    if (!maintainPresetSorting) {
-      presets = state.presets
-    }
-  })
-
-  // Update the selectedCategory and load the associated presets column
-  const handleCategoryClick = (category: string): void => {
-    maintainPresetSorting = true
-    presetsStore.update((state) => ({
-      ...state,
-      selectedCategory: category,
-    }))
-
+  const filterByCategory = (category: string): void => {
     switch (category) {
       case $presetsStore.categories[0]:
         presets = $presetsStore.presets
@@ -48,9 +31,34 @@
         presets = $presetsStore.presets.filter((preset) => preset.tags.includes(category))
         break
     }
+  }
 
-    adding = false
-    editing = false
+  const unsubscribePresetsStore = presetsStore.subscribe((state) => {
+    selectedPreset = state.presets.find(({ id }) => id === state.selectedPatch) as Patch
+
+    if (!maintainPresetSorting) {
+      presets = state.presets
+      filterByCategory(state.selectedCategory)
+    }
+  })
+
+  // Revert to preset detail view
+  const handleCancelClick = () => viewStore.update((state) => ({
+    ...state,
+    presetsView: 'view',
+  }))
+
+  // Update the selectedCategory and load the associated presets column
+  const handleCategoryClick = (category: string): void => {
+    maintainPresetSorting = true
+    presetsStore.update((state) => ({
+      ...state,
+      selectedCategory: category,
+    }))
+
+    filterByCategory(category)
+
+
     maintainPresetSorting = false
   }
 
@@ -66,8 +74,7 @@
 
     patchStore.update(() => ({ ...selectedPreset  }))
 
-    adding = false
-    editing = false
+    handleCancelClick()
     maintainPresetSorting = false
   }
 
@@ -85,10 +92,7 @@
   }
 
   // Handle "Add Preset" button click
-  const handleAddPresetClick = () => adding = true
-
-  // Toggle edit view
-  const handleEditClick = () => editing = !editing
+  const handleAddPresetClick = () => viewStore.update((state) => ({ ...state, presetsView: 'add' }))
 
   onDestroy(unsubscribePresetsStore)
 </script>
@@ -118,18 +122,16 @@
     </div>
     <PresetsTable {presets} {handlePresetClick} {isSearching} />
 
-    <button on:click={handleAddPresetClick} in:fly={{ y: 20, duration: 400 }} class="btn btn-primary btn-2xl hover:scale-105 duration-250 ease-in-out rounded-lg absolute right-4 bottom-4 text-white"><Plus /></button>
+    <button on:click={handleAddPresetClick} in:fly={{ y: 20, duration: 400 }} class="btn btn-primary btn-2xl hover:scale-105 duration-250 ease-in-out rounded-lg absolute right-4 {!$sessionStore.connectedStatus ? 'bottom-12' : 'bottom-4'} text-white"><Plus /></button>
   </div>
 
-  <div class="col-span-2 pt-5 px-6 bg-base-300">
-    {#if adding}
-      <AddPreset handleCancelClick={() => adding = false} />
+  <div class="col-span-2 pt-5 pr-6 pl-4 bg-base-300">
+    {#if $viewStore.presetsView === 'add'}
+      <AddPreset {handleCancelClick} />
+    {:else if $viewStore.presetsView === 'edit'}
+      <EditPreset {handleCancelClick} preset={selectedPreset} />
     {:else}
-      {#if editing}
-        <EditPreset handleCancelClick={handleEditClick} preset={selectedPreset} />
-      {:else}
-        <PresetInfo {handleEditClick} {handleCategoryClick} preset={selectedPreset} />
-      {/if}
+      <PresetInfo {handleCategoryClick} preset={selectedPreset} />
     {/if}
   </div>
 </div>

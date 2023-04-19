@@ -1,9 +1,9 @@
 <script lang="ts">
-  import type * as webnative from 'webnative'
-  import { createEventDispatcher, onDestroy } from 'svelte'
-  import type { AccountLinkingProducer } from 'webnative'
+  import type * as odd from '@oddjs/odd'
+  import { onDestroy } from 'svelte'
+  import type { AccountLinkingProducer } from '@oddjs/odd'
 
-  import { authStore } from '../../stores'
+  import { authStore, viewStore } from '../../stores'
   import { setConnectedStatus } from '$lib/auth/connected'
   import Register from '$components/views/connect/Register.svelte'
   import Link from '$components/views/connect/Link.svelte'
@@ -12,10 +12,8 @@
 
   type View = 'register' | 'link' | 'confirm-pin' | 'connected'
 
-  const dispatch = createEventDispatcher()
-
-  let authStrategy: webnative.AuthenticationStrategy | null
-  let session: webnative.Session | null
+  let authStrategy: odd.AuthenticationStrategy | null
+  let session: odd.Session | null
   let username = ''
 
   let accountLinkingProducer: AccountLinkingProducer
@@ -60,7 +58,10 @@
   function handleLinkingCanceled() {
     if (accountLinkingProducer) accountLinkingProducer.cancel()
 
-    dispatch('navigate', { view: 'effect' })
+    viewStore.update(state => ({
+      ...state,
+      globalView: 'effect'
+    }))
   }
 
   async function handleRelink() {

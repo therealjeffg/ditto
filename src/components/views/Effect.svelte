@@ -4,12 +4,10 @@
   import { default as core } from '@elemaudio/plugin-renderer'
 
   import { limits, process } from '$lib/audio/delay.js'
-  import { patchStore, presetsStore } from '../../stores.js'
+  import { patchStore } from '../../stores.js'
   import { objectEntries, translateToRange } from '$lib/utils.js'
   import type { Channels, Params } from '$lib/audio'
-  import { addNotification } from '$lib/notifications'
   import type { Patch } from '$lib/patch'
-  import { savePreset } from '$lib/presets'
   import Knob from '$components/controls/Knob.svelte'
 
 
@@ -18,7 +16,6 @@
 
   let patch: Patch
   let selectedParam: keyof Params | null = null
-  let unsavedChanges = false
 
   const params: Params = {
     delayTime: {
@@ -87,44 +84,6 @@
     patchStore.set(patch)
   }
 
-  function setParam2(id : string, value : number) {
-
-    console.log('setParame>', id, value)
-
-    switch (id) {
-      case 'delayTime':
-        patch.params.delayTime = (value * 1000)
-        break
-
-      case 'feedback':
-        patch.params.feedback = (value * 100)
-        break
-
-      case 'mix':
-        patch.params.mix = (value * 100)
-        break
-    }
-
-    console.log('setParam2>', patch.params)
-
-    patchStore.set(patch)
-  }
-
-  core.on('parameterValueChange', function(e) {
-    // console.log(e.paramId, e.value); // e.g. "feedback"
-    setParam2(e.paramId, e.value)
-  })
-
-  const handleSavePatch = async (): Promise<void> => {
-    try {
-      await savePreset(patch)
-      addNotification('Patch updated', 'success')
-    } catch (error) {
-      addNotification('Failed to update patch', 'error')
-      console.error(error)
-    }
-  }
-
   $: {
     const feedback = translateToRange({
       num: patch.params.feedback,
@@ -138,10 +97,6 @@
       scaled: { min: limits.mix.min, max: limits.mix.max }
     })
 
-    // Check if the patch params have been modified from the original preset
-    const associatedPreset = $presetsStore.presets.find(({ id }) => id === patch.id)
-    unsavedChanges = (associatedPreset?.params.delayTime !== patch.params.delayTime) || (associatedPreset?.params.feedback !== patch.params.feedback) || (associatedPreset?.params.mix !== patch.params.mix)
-
     render(
       process({
         input,
@@ -153,13 +108,13 @@
   }
 </script>
 <div class="flex flex-col items-center justify-center gap-8 min-h-[calc(100vh-150px)]">
-  <div class="grid-container grid grid-cols-3 gap-4 mx-auto">
+  <div class="relative grid-container grid grid-cols-3 gap-4 mx-auto">
     {#each objectEntries(params) as [id, param], i}
       <div in:fly={{ y: 20, delay: 0+(i*50), duration: 350 }}>
         <Knob
           {id}
           label={param.label}
-          value={patch.params[id]}
+          bind:value={patch.params[id]}
           min={param.min}
           max={param.max}
           unitLabel={param.unitLabel}
@@ -170,8 +125,5 @@
         />
       </div>
     {/each}
-    <!-- {#if patch.id !== 'default'}
-      <button on:click={handleSavePatch} class="col-end-4 btn btn-secondary">Save changes</button>
-    {/if} -->
   </div>
 </div>

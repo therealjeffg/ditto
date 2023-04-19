@@ -1,8 +1,9 @@
-import * as webnative from 'webnative'
+import * as odd from '@oddjs/odd'
 import { get as getStore } from 'svelte/store'
 
 import { fileSystemStore, patchStore, presetsStore } from '../../stores'
-import { DEFAULT_PATCH, Visibility, type  Patch } from '$lib/patch'
+import { getUsername } from '$lib/auth'
+import { DEFAULT_PATCH, Visibility, type Patch } from '$lib/patch'
 import { DEFAULT_CATEGORIES, PRESETS_DIRS } from '$lib/presets/constants'
 
 export type Presets = {
@@ -11,6 +12,8 @@ export type Presets = {
   selectedCategory: string
   selectedPatch: string
 }
+
+export let originalPresets: Patch[] = []
 
 /**
  * Load patches from either a public or private file system
@@ -36,7 +39,7 @@ export const loadFromFilesystem: (visibility: Visibility) => Promise<Patch[]> = 
 
   const data = await Promise.all(links.map(async ([name, _]) =>
     JSON.parse(new TextDecoder().decode(await fs?.read(
-      webnative.path.combine(PRESETS_DIRS[visibility], webnative.path.file(name))
+      odd.path.combine(PRESETS_DIRS[visibility], odd.path.file(name))
     ))) as Patch
   ))
 
@@ -51,6 +54,7 @@ export const hydratePresetsStore = async () => {
   const publicPresets = await loadFromFilesystem(Visibility.public)
   const privatePresets = await loadFromFilesystem(Visibility.private)
   const presets = [DEFAULT_PATCH, ...publicPresets, ...privatePresets].sort((a, b) => a.name.localeCompare(b.name, 'en', {'sensitivity': 'base'}))
+  originalPresets = JSON.parse(JSON.stringify(presets))
 
   presetsStore.set({
     categories: deriveCategoriesFromPresets(presets),
@@ -85,11 +89,11 @@ const addOrUpdate = (arr: Patch[], element: Patch): Patch[] => {
  */
 export const savePreset = async (preset: Patch) => {
   const fs = getStore(fileSystemStore)
-  const contentPath = webnative.path.combine(PRESETS_DIRS[preset.visibility], webnative.path.file(`${preset?.id}.json`))
+  const contentPath = odd.path.combine(PRESETS_DIRS[preset.visibility], odd.path.file(`${preset?.id}.json`))
 
   // Check for duplicate preset in the opposite directory and remove it
   const oppositeDirectory = preset.visibility === Visibility.private ? Visibility.public : Visibility.private
-  const oppositeContentPath = webnative.path.combine(PRESETS_DIRS[oppositeDirectory], webnative.path.file(`${preset?.id}.json`))
+  const oppositeContentPath = odd.path.combine(PRESETS_DIRS[oppositeDirectory], odd.path.file(`${preset?.id}.json`))
   const exists = await fs?.exists(oppositeContentPath)
   if (exists) {
     await fs?.rm(
@@ -103,10 +107,15 @@ export const savePreset = async (preset: Patch) => {
   )
   await fs?.publish()
 
-  presetsStore.update((state) => ({
-    ...state,
-    presets: addOrUpdate(state.presets, preset).sort((a, b) => a.name.localeCompare(b.name, 'en', {'sensitivity': 'base'})),
-  }))
+  presetsStore.update((state) => {
+    const updatedPresets = addOrUpdate(state.presets, preset).sort((a, b) => a.name.localeCompare(b.name, 'en', {'sensitivity': 'base'}))
+    originalPresets = JSON.parse(JSON.stringify(updatedPresets))
+
+    return {
+      ...state,
+      presets: updatedPresets,
+    }
+  })
 
   const storedPreset = JSON.parse(new TextDecoder().decode(
     await fs?.read(contentPath)
@@ -122,13 +131,62 @@ export const savePreset = async (preset: Patch) => {
 }
 
 /**
+ * Batch write all presets before publishing to the file system
+ *
+ * @param presets Patch[]
+ */
+export const saveAllPresets = async (presets: Patch[]) => {
+  const fs = getStore(fileSystemStore)
+  const username = getUsername()
+
+  const updatedPresets = []
+
+  // Update and write presets sequentially
+  for (const preset of presets) {
+    const updatedPreset = {
+      ...preset,
+      creator: username
+    }
+
+    const contentPath = odd.path.combine(PRESETS_DIRS[ updatedPreset.visibility ], odd.path.file(`${updatedPreset?.id}.json`))
+
+    await fs?.write(
+      contentPath,
+      new TextEncoder().encode(JSON.stringify(updatedPreset))
+    )
+
+    updatedPresets.push(updatedPreset)
+  }
+
+  await fs?.publish()
+
+  await Promise.all(updatedPresets.map((preset) => {
+    // Update presets store
+    presetsStore.update((state) => {
+      const updatedPresets = addOrUpdate(state.presets, preset).sort((a, b) => a.name.localeCompare(b.name, 'en', { 'sensitivity': 'base' }))
+
+      return {
+        ...state,
+        presets: updatedPresets,
+      }
+    })
+
+    // Update patchStore if it currently contains this preset
+    const patch = getStore(patchStore)
+    if (patch.id === preset?.id) {
+      patchStore.update(() => preset)
+    }
+  }))
+}
+
+/**
  * Delete preset from the file system and remove it from the preset list
  *
  * @param preset Patch
  */
 export const deletePreset = async (preset: Patch) => {
   const fs = getStore(fileSystemStore)
-  const contentPath = webnative.path.combine(PRESETS_DIRS[preset.visibility], webnative.path.file(`${preset?.id}.json`))
+  const contentPath = odd.path.combine(PRESETS_DIRS[preset.visibility], odd.path.file(`${preset?.id}.json`))
 
   await fs?.rm(contentPath)
 
@@ -140,6 +198,8 @@ export const deletePreset = async (preset: Patch) => {
     selectedCategory: DEFAULT_CATEGORIES[0],
     selectedPatch: DEFAULT_PATCH.id,
   }))
+
+  patchStore.update(() => DEFAULT_PATCH)
 }
 
 /**
@@ -158,23 +218,4 @@ export const deriveCategoriesFromPresets = (presets: Patch[]): string[] => {
    categories.sort((a, b) => a.localeCompare(b, 'en', {'sensitivity': 'base'}))
 
   return [...DEFAULT_CATEGORIES, ...categories]
-}
-
-/**
- * Store patches to either a public or private file system
- *
- * @param presets Presets to store
- * @param visibility Visibility
- * @returns Promise<Patch[]>
- */
-export const storeToFilesystem: (presets: Patch[], visibility: Visibility) => Promise<void> = async (presets, visibility) => {
-  const fs = getStore(fileSystemStore)
-
-  await Promise.all(presets.map(async preset => {
-    await fs?.write(
-      webnative.path.combine(PRESETS_DIRS[visibility], webnative.path.file(`${preset?.id}.json`)),
-      new TextEncoder().encode(JSON.stringify(preset))
-      )
-  }))
-  await fs?.publish()
 }
